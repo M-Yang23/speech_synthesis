@@ -120,54 +120,92 @@
 
     <script>
         // =========================================
-        // 1. 数据准备 (您可以像这样添加更多单词)
+        // 1. 数据准备 (扩展词库)
         // =========================================
         const vocabList = [
-            {
-                word: "banana",
-                syllables: ["ba", "na", "na"],
-                translation: "香蕉",
-                note: "注意：后两个 na 发音轻一点"
-            },
-            {
-                word: "teacher",
-                syllables: ["tea", "cher"],
-                translation: "老师",
-                note: "东北话窍门：结尾 'cher' 就读成儿化音的 '彻儿'！"
-            },
-            {
-                word: "computer",
-                syllables: ["com", "pu", "ter"],
-                translation: "电脑",
-                note: "重音在中间 'pu' 上，结尾 'ter' 也是儿化音 '特儿'"
-            }
+            { word: "banana", syllables: ["ba", "na", "na"], translation: "香蕉", note: "注意：后两个 na 发音轻一点" },
+            { word: "teacher", syllables: ["tea", "cher"], translation: "老师", note: "东北话窍门：结尾 'cher' 就读成儿化音的 '彻儿'！" },
+            { word: "computer", syllables: ["com", "pu", "ter"], translation: "电脑", note: "重音在中间 'pu' 上，结尾 'ter' 也是儿化音 '特儿'" },
+            { word: "apple", syllables: ["ap", "ple"], translation: "苹果", note: "注意 'ple' 的读音像是 '剖'" },
+            { word: "orange", syllables: ["or", "ange"], translation: "橙子", note: "以卷舌音开头" },
+            { word: "elephant", syllables: ["el", "e", "phant"], translation: "大象", note: "重音在最前面" },
+            { word: "guitar", syllables: ["gui", "tar"], translation: "吉他", note: "重音在后面 'tar'" },
+            { word: "umbrella", syllables: ["um", "brel", "la"], translation: "雨伞", note: "注意中间的 'brel' 发音" },
+            { word: "hospital", syllables: ["hos", "pi", "tal"], translation: "医院", note: "每个音节都很清晰" },
+            { word: "restaurant", syllables: ["res", "tau", "rant"], translation: "餐厅", note: "中间的 'tau' 发音像 '特'" },
+            { word: "library", syllables: ["li", "bra", "ry"], translation: "图书馆", note: "注意 'bra' 的发音" },
+            { word: "beautiful", syllables: ["beau", "ti", "ful"], translation: "美丽的", note: "像 '标题否'，但要连贯" },
+            { word: "important", syllables: ["im", "por", "tant"], translation: "重要的", note: "闭嘴音 'm' 要发出来" },
+            { word: "vacation", syllables: ["va", "ca", "tion"], translation: "假期", note: "结尾 'tion' 读 '神'" },
+            { word: "chocolate", syllables: ["choc", "o", "late"], translation: "巧克力", note: "中间的 'o' 经常轻读甚至不读" },
+            { word: "vegetable", syllables: ["veg", "ta", "ble"], translation: "蔬菜", note: "注意不是 ve-ge-ta-ble，只有三个音节" },
+            { word: "comfortable", syllables: ["com", "for", "ta", "ble"], translation: "舒适的", note: "口语常读成 'comf-ta-ble'" },
+            { word: "Wednesday", syllables: ["Wednes", "day"], translation: "星期三", note: "第一个 'd' 不发音，读 'Wenz-day'" },
+            { word: "February", syllables: ["Feb", "ru", "ar", "y"], translation: "二月", note: "中间的 'ru' 稍微有点难发" },
+            { word: "delicious", syllables: ["de", "li", "cious"], translation: "美味的", note: "结尾 'cious' 读 '舍斯'" }
         ];
+
+        // =========================================
+        // A. 辅助函数：随机与日期相关
+        // =========================================
+
+        // 简单的伪随机数生成器 (Linear Congruential Generator)
+        // 保证给定种子(seed)时，产生的序列是固定的
+        function seededRandom(seed) {
+            let m = 0x80000000;
+            let a = 1103515245;
+            let c = 12345;
+            let state = seed ? seed : Math.floor(Math.random() * (m - 1));
+
+            return function () {
+                state = (a * state + c) % m;
+                return state / (m - 1);
+            }
+        }
+
+        // 获取当天的种子 (格式：YYYYMMDD)
+        function getTodaySeed() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            return parseInt(`${year}${month}${day}`);
+        }
+
+        // 洗牌算法 (Fisher-Yates)
+        function shuffle(array, randomFunc) {
+            let currentIndex = array.length, randomIndex;
+            // While there remain elements to shuffle.
+            while (currentIndex != 0) {
+                // Pick a remaining element.
+                randomIndex = Math.floor(randomFunc() * currentIndex);
+                currentIndex--;
+                // And swap it with the current element.
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
 
         // =========================================
         // 2. 语音合成功能 (核心技术)
         // =========================================
         const synth = window.speechSynthesis;
-        // 获取合适的嗓音 (在手机上通常会自动选择最好的英文嗓音)
         let preferredVoice = null;
         function loadVoices() {
             const voices = synth.getVoices();
-            // 优先找美式英语女声，没有就用默认英文
             preferredVoice = voices.find(v => v.lang === 'en-US' && v.name.includes('Female')) ||
                 voices.find(v => v.lang.startsWith('en'));
         }
-        // 语音加载有时是异步的，确保加载完成
         if (speechSynthesis.onvoiceschanged !== undefined) {
             speechSynthesis.onvoiceschanged = loadVoices;
         }
 
-        // 发音函数
         function speakText(text, rate = 0.8) {
-            // 如果正在说话，先打断
             if (synth.speaking) synth.cancel();
             const utterThis = new SpeechSynthesisUtterance(text);
-            utterThis.lang = 'en-US'; // 强制美式发音
-            utterThis.rate = rate;    // 语速：0.8 比较适合老年人慢速跟读
-            utterThis.pitch = 1;      // 音调正常
+            utterThis.lang = 'en-US';
+            utterThis.rate = rate;
+            utterThis.pitch = 1;
             if (preferredVoice) utterThis.voice = preferredVoice;
             synth.speak(utterThis);
         }
@@ -177,41 +215,151 @@
         // =========================================
         const appContainer = document.getElementById('app');
 
-        vocabList.forEach((item, index) => {
-            // 创建卡片
+        // 状态管理
+        let currentMode = 'daily'; // 'daily' or 'random'
+        const WORDS_PER_PAGE = 3;  //每次显示3个单词
+
+        function getWordsForMode() {
+            // 复制一份词库以免修改原数组
+            let words = [...vocabList];
+            let rng;
+
+            if (currentMode === 'daily') {
+                const seed = getTodaySeed();
+                rng = seededRandom(seed);
+                // 使用带种子的随机数进行洗牌，保证每天一样
+                shuffle(words, rng);
+            } else {
+                // 完全随机
+                rng = Math.random;
+                shuffle(words, rng);
+            }
+
+            // 取前 N 个
+            return words.slice(0, WORDS_PER_PAGE);
+        }
+
+        function renderApp() {
+            appContainer.innerHTML = ''; // 清空当前内容
+
+            // 添加控制栏
+            renderControls();
+
+            const wordsToDisplay = getWordsForMode();
+
+            if (wordsToDisplay.length === 0) {
+                appContainer.innerHTML += '<p>没有单词可显示。</p>';
+                return;
+            }
+
+            wordsToDisplay.forEach((item) => {
+                createWordCard(item);
+            });
+        }
+
+        function renderControls() {
+            const controlsDiv = document.createElement('div');
+            controlsDiv.style.marginBottom = '20px';
+            controlsDiv.style.display = 'flex';
+            controlsDiv.style.justifyContent = 'center';
+            controlsDiv.style.gap = '10px';
+
+            const dailyBtn = document.createElement('button');
+            dailyBtn.innerText = '📅 每日一练';
+            dailyBtn.className = currentMode === 'daily' ? 'syllable-btn' : 'full-read-btn'; // 复用样式，daily模式下高亮(或者反过来，这里为了简单先用现有的类)
+            // 修正样式逻辑：
+            // 我们自定义简单的样式来区分选中状态
+            styleModeBtn(dailyBtn, currentMode === 'daily');
+            dailyBtn.onclick = () => {
+                if (currentMode !== 'daily') {
+                    currentMode = 'daily';
+                    renderApp();
+                }
+            };
+
+            const randomBtn = document.createElement('button');
+            randomBtn.innerText = '🎲 随机练习';
+            styleModeBtn(randomBtn, currentMode === 'random');
+            randomBtn.onclick = () => {
+                if (currentMode !== 'random') {
+                    currentMode = 'random';
+                    renderApp();
+                } else {
+                    // 如果已经是随机模式，点击则刷新
+                    renderApp();
+                }
+            };
+
+            controlsDiv.appendChild(dailyBtn);
+            controlsDiv.appendChild(randomBtn);
+
+            // 如果是随机模式，额外加一个“换一批”按钮，或者让用户再次点击“随机练习”即可
+            // 为了直观，我们可以在随机模式下加一个明显的“换一批”
+            if (currentMode === 'random') {
+                const refreshBtn = document.createElement('button');
+                refreshBtn.innerText = '🔄 换一批';
+                styleModeBtn(refreshBtn, false); // 普通按钮样式
+                refreshBtn.style.backgroundColor = '#34C759'; // 绿色
+                refreshBtn.onclick = () => renderApp();
+                controlsDiv.appendChild(refreshBtn);
+            }
+
+            appContainer.appendChild(controlsDiv);
+
+            // 添加标题说明
+            const modeTitle = document.createElement('p');
+            modeTitle.style.color = '#666';
+            modeTitle.innerText = currentMode === 'daily'
+                ? `今天是 ${new Date().toLocaleDateString()}，这是为您挑选的单词：`
+                : '随机抽取的单词，随时点击“换一批”更新：';
+            appContainer.appendChild(modeTitle);
+        }
+
+        function styleModeBtn(btn, isActive) {
+            btn.style.padding = '10px 20px';
+            btn.style.borderRadius = '20px';
+            btn.style.border = 'none';
+            btn.style.cursor = 'pointer';
+            btn.style.fontSize = '16px';
+            btn.style.fontWeight = 'bold';
+
+            if (isActive) {
+                btn.style.backgroundColor = '#007AFF';
+                btn.style.color = 'white';
+                btn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+            } else {
+                btn.style.backgroundColor = '#E5E5EA';
+                btn.style.color = '#333';
+            }
+        }
+
+        function createWordCard(item) {
             const card = document.createElement('div');
             card.className = 'word-card';
 
-            // 中文翻译
             const trans = document.createElement('h2');
             trans.className = 'translation';
             trans.innerText = item.translation;
             card.appendChild(trans);
 
-            // 音节按钮容器
             const sylContainer = document.createElement('div');
             sylContainer.className = 'syllable-container';
 
-            // 生成每个音节的按钮
             item.syllables.forEach(syl => {
                 const btn = document.createElement('button');
                 btn.className = 'syllable-btn';
                 btn.innerText = syl;
-                // 点击音节：慢速朗读该音节
                 btn.onclick = () => speakText(syl, 0.6);
                 sylContainer.appendChild(btn);
             });
             card.appendChild(sylContainer);
 
-            // 整词朗读按钮
             const fullBtn = document.createElement('button');
             fullBtn.className = 'full-read-btn';
             fullBtn.innerHTML = `🔊 完整朗读：${item.word}`;
-            // 点击整词：正常稍慢语速朗读
             fullBtn.onclick = () => speakText(item.word, 0.8);
             card.appendChild(fullBtn);
 
-            // 东北话小贴士
             if (item.note) {
                 const noteP = document.createElement('p');
                 noteP.className = 'note';
@@ -220,7 +368,10 @@
             }
 
             appContainer.appendChild(card);
-        });
+        }
+
+        // 初始化渲染
+        renderApp();
 
         // =========================================
         // 4. PWA Service Worker 注册 (用于离线)
