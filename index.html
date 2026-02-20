@@ -123,26 +123,30 @@
         // 1. 数据准备 (扩展词库)
         // =========================================
         const vocabList = [
-            { word: "banana", syllables: ["ba", "na", "na"], translation: "香蕉", note: "注意：后两个 na 发音轻一点" },
-            { word: "teacher", syllables: ["tea", "cher"], translation: "老师", note: "东北话窍门：结尾 'cher' 就读成儿化音的 '彻儿'！" },
-            { word: "computer", syllables: ["com", "pu", "ter"], translation: "电脑", note: "重音在中间 'pu' 上，结尾 'ter' 也是儿化音 '特儿'" },
-            { word: "apple", syllables: ["ap", "ple"], translation: "苹果", note: "注意 'ple' 的读音像是 '剖'" },
-            { word: "orange", syllables: ["or", "ange"], translation: "橙子", note: "以卷舌音开头" },
-            { word: "elephant", syllables: ["el", "e", "phant"], translation: "大象", note: "重音在最前面" },
-            { word: "guitar", syllables: ["gui", "tar"], translation: "吉他", note: "重音在后面 'tar'" },
-            { word: "umbrella", syllables: ["um", "brel", "la"], translation: "雨伞", note: "注意中间的 'brel' 发音" },
-            { word: "hospital", syllables: ["hos", "pi", "tal"], translation: "医院", note: "每个音节都很清晰" },
-            { word: "restaurant", syllables: ["res", "tau", "rant"], translation: "餐厅", note: "中间的 'tau' 发音像 '特'" },
-            { word: "library", syllables: ["li", "bra", "ry"], translation: "图书馆", note: "注意 'bra' 的发音" },
-            { word: "beautiful", syllables: ["beau", "ti", "ful"], translation: "美丽的", note: "像 '标题否'，但要连贯" },
-            { word: "important", syllables: ["im", "por", "tant"], translation: "重要的", note: "闭嘴音 'm' 要发出来" },
-            { word: "vacation", syllables: ["va", "ca", "tion"], translation: "假期", note: "结尾 'tion' 读 '神'" },
-            { word: "chocolate", syllables: ["choc", "o", "late"], translation: "巧克力", note: "中间的 'o' 经常轻读甚至不读" },
-            { word: "vegetable", syllables: ["veg", "ta", "ble"], translation: "蔬菜", note: "注意不是 ve-ge-ta-ble，只有三个音节" },
-            { word: "comfortable", syllables: ["com", "for", "ta", "ble"], translation: "舒适的", note: "口语常读成 'comf-ta-ble'" },
-            { word: "Wednesday", syllables: ["Wednes", "day"], translation: "星期三", note: "第一个 'd' 不发音，读 'Wenz-day'" },
-            { word: "February", syllables: ["Feb", "ru", "ar", "y"], translation: "二月", note: "中间的 'ru' 稍微有点难发" },
-            { word: "delicious", syllables: ["de", "li", "cious"], translation: "美味的", note: "结尾 'cious' 读 '舍斯'" }
+            "banana",
+            "teacher",
+            "computer",
+            "apple",
+            "orange",
+            "elephant",
+            "guitar",
+            "umbrella",
+            "hospital",
+            "restaurant",
+            "library",
+            "beautiful",
+            "important",
+            "vacation",
+            "chocolate",
+            "vegetable",
+            "comfortable",
+            "Wednesday",
+            "February",
+            "delicious",
+            "hello",
+            "world",
+            "family",
+            "friend"
         ];
 
         // =========================================
@@ -252,9 +256,67 @@
                 return;
             }
 
-            wordsToDisplay.forEach((item) => {
-                createWordCard(item);
+            // 不再直接创建卡片，而是先生成占位符，然后异步请求数据
+            wordsToDisplay.forEach((word) => {
+                const card = document.createElement('div');
+                card.className = 'word-card';
+                card.id = `card-${word}`;
+                card.innerHTML = `<h2 class="translation" style="color:#999;">正在加载 ${word} 的信息...</h2>`;
+                appContainer.appendChild(card);
+
+                fetchWordData(word, card);
             });
+        }
+
+        async function fetchWordData(word, cardElement) {
+            try {
+                // 并行请求翻译和发音
+                const [dictRes, transRes] = await Promise.all([
+                    fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`).catch(() => null),
+                    fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh`).catch(() => null)
+                ]);
+
+                let phonetic = '音标未找到';
+                let audioUrl = null;
+                if (dictRes && dictRes.ok) {
+                    const dictData = await dictRes.json();
+                    if (dictData && dictData.length > 0) {
+                        const entry = dictData[0];
+                        // 寻找音标 (有些条目在 phonetics 里，有的直接在第一层)
+                        phonetic = entry.phonetic || '';
+                        if (!phonetic && entry.phonetics) {
+                            const p = entry.phonetics.find(x => x.text);
+                            if (p) phonetic = p.text;
+                        }
+
+                        // 寻找音频URL (优先找含US或能播放的)
+                        if (entry.phonetics) {
+                            // 优先找us后缀的mp3
+                            const audios = entry.phonetics.filter(x => x.audio);
+                            const usAudio = audios.find(x => x.audio.includes('-us.mp3'));
+                            const anyAudio = audios.find(x => x.audio.length > 0);
+                            if (usAudio) {
+                                audioUrl = usAudio.audio;
+                            } else if (anyAudio) {
+                                audioUrl = anyAudio.audio;
+                            }
+                        }
+                    }
+                }
+
+                let translation = '翻译未找到';
+                if (transRes && transRes.ok) {
+                    const transData = await transRes.json();
+                    if (transData && transData.responseData) {
+                        translation = transData.responseData.translatedText;
+                    }
+                }
+
+                populateWordCard(cardElement, word, phonetic, translation, audioUrl);
+            } catch (error) {
+                console.error("加载单词数据失败:", error);
+                populateWordCard(cardElement, word, "加载失败", "加载失败", null);
+            }
         }
 
         function renderControls() {
@@ -333,41 +395,45 @@
             }
         }
 
-        function createWordCard(item) {
-            const card = document.createElement('div');
-            card.className = 'word-card';
+        function populateWordCard(card, word, phonetic, translation, audioUrl) {
+            card.innerHTML = ''; // 清除加载状态
 
             const trans = document.createElement('h2');
             trans.className = 'translation';
-            trans.innerText = item.translation;
+            trans.innerText = translation;
             card.appendChild(trans);
 
-            const sylContainer = document.createElement('div');
-            sylContainer.className = 'syllable-container';
+            const displayWord = document.createElement('h1');
+            displayWord.style.margin = '0';
+            displayWord.style.fontSize = '36px';
+            displayWord.style.color = 'var(--primary-color)';
+            displayWord.innerText = word;
+            card.appendChild(displayWord);
 
-            item.syllables.forEach(syl => {
-                const btn = document.createElement('button');
-                btn.className = 'syllable-btn';
-                btn.innerText = syl;
-                btn.onclick = () => speakText(syl, 0.6);
-                sylContainer.appendChild(btn);
-            });
-            card.appendChild(sylContainer);
+            if (phonetic) {
+                const phoText = document.createElement('p');
+                phoText.style.fontSize = '22px';
+                phoText.style.color = '#555';
+                phoText.style.margin = '10px 0 25px 0';
+                phoText.innerText = phonetic;
+                card.appendChild(phoText);
+            }
 
             const fullBtn = document.createElement('button');
             fullBtn.className = 'full-read-btn';
-            fullBtn.innerHTML = `🔊 完整朗读：${item.word}`;
-            fullBtn.onclick = () => speakText(item.word, 0.8);
-            card.appendChild(fullBtn);
 
-            if (item.note) {
-                const noteP = document.createElement('p');
-                noteP.className = 'note';
-                noteP.innerText = `💡 ${item.note}`;
-                card.appendChild(noteP);
+            if (audioUrl) {
+                fullBtn.innerHTML = `🔊 播放真人发音`;
+                fullBtn.onclick = () => {
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+                };
+            } else {
+                fullBtn.innerHTML = `� 合成发音：${word} (无真人录音)`;
+                fullBtn.onclick = () => speakText(word, 0.8);
             }
 
-            appContainer.appendChild(card);
+            card.appendChild(fullBtn);
         }
 
         // 初始化渲染
