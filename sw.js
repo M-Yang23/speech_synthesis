@@ -1,5 +1,5 @@
 // 定义缓存名称，如果修改了代码想要用户端更新，需要修改这个版本号 (比如改为 v2)
-const CACHE_NAME = 'english-helper-v1';
+const CACHE_NAME = 'english-helper-v2';
 // 需要缓存的文件列表
 const ASSETS_TO_CACHE = [
     './',
